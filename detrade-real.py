@@ -15,49 +15,29 @@ if platform.system() == 'Windows' :
 session = requests.Session()
 
 
-_BTC        = {"name" : "BTC",  "multi" : 1}        # !
-_ETH        = {"name" : "ETH",  "multi" : 10}       # !
-_BNB        = {"name" : "BNB",  "multi" : 10}       # !
-_SOL        = {"name" : "SOL",  "multi" : 100}      # !
-_LINK       = {"name" : "LINK", "multi" : 100}
-_ETC        = {"name" : "ETC",  "multi" : 1000}
-_UNI        = {"name" : "UNI",  "multi" : 1000}  
-_FTM        = {"name" : "FTM",  "multi" : 10000}
 _XRP        = {"name" : "XRP",  "multi" : 10000}    # !
-_KAVA       = {"name" : "KAVA", "multi" : 10000}
-_TON        = {"name" : "PEPE", "multi" : 10000}
-_TRX        = {"name" : "TRX",  "multi" : 100000}
-_DOGE       = {"name" : "DOGE", "multi" : 100000}   # !
-_PEPE       = {"name" : "PEPE", "multi" : 1000000000}
-_SHIB       = {"name" : "SHIB", "multi" : 1000000000}
-
-
-
-
-# api_url   = "https://api.binance.com/api/v3/depth?symbol=" + _XRP["name"] + "USDT&limit=1"
 api_url     = "https://fapi.binance.com/fapi/v1/depth?symbol=" + _XRP["name"] + "USDT"
-# api_url   = "https://dapi.binance.com/dapi/v1/depth?symbol=" + _XRP["name"] + "USDT&limit=1"
-# api_okx     = "https://www.okx.com/api/v5/market/history-candles?instId=" + _XRP["name"] + "-USDT&bar=1s"
-
 
 
 is_first = 1
 
 time_last = 0.0
 now_option = 0
+last_option = 0
 is_place = 0
 
 limit_stop = 0
 limit_gap = 3
 limit_step = 0
-jump_gap = 3
+jump_gap = 2
 
+net_state = 200
 last_input = 0
 
 
 
 def check_algo_1 (input): 
-    global last_input, is_place, now_option, limit_stop, limit_gap, limit_step, jump_gap
+    global last_input, is_place, now_option, limit_stop, limit_gap, limit_step, jump_gap, net_state
 
     gap = input - last_input 
     if(gap != 0):
@@ -75,12 +55,13 @@ def check_algo_1 (input):
                     limit_step+=1
                     print("+ place updated -- " + str(limit_step))
             else:
-                stop_round()
+                t1 = Thread(target=stop_round, args=(1,))
+                t1.start()
                 print("place has beed stoped -- " + str(limit_stop) + "    " + str(input))
                 limit_stop = 0 
                 is_place = 0
                 limit_step = 0
-                time.sleep(5)
+                time.sleep(5)   
         else:
             if(input <= limit_stop):
                 if(input < (limit_stop - limit_gap)):
@@ -88,7 +69,8 @@ def check_algo_1 (input):
                     limit_step+=1
                     print("+ place updated -- " + str(limit_step))
             else:
-                stop_round()
+                t1 = Thread(target=stop_round, args=(0,))
+                t1.start()
                 print("place has beed stoped -- " + str(limit_stop) + "    " + str(input))
                 limit_stop = 0 
                 is_place = 0
@@ -96,18 +78,21 @@ def check_algo_1 (input):
                 time.sleep(5)
 
     else:
-        if (gap >= jump_gap):
-            is_place = 1
-            limit_stop = input
-            now_option = 1
-            start_round(now_option)
-            print("up start")
-        elif (gap <= (jump_gap * -1)):
-            is_place = 1
-            limit_stop = input
-            now_option = 0
-            start_round(now_option)
-            print("down start")
+        if(net_state != 500):
+            if (gap >= jump_gap):
+                is_place = 1
+                limit_stop = input
+                now_option = 1
+                t1 = Thread(target=start_round, args=(now_option,))
+                t1.start()
+                print("up start")
+            elif (gap <= (jump_gap * -1)):
+                is_place = 1
+                limit_stop = input
+                now_option = 0
+                t1 = Thread(target=start_round, args=(now_option,))
+                t1.start()
+                print("down start")
             
     last_input = input
 
@@ -216,14 +201,14 @@ def place_round():
 
 
 def option_round(option):
-    global now_option
-    if(now_option != option):
+    global last_option
+    if(last_option != option):
         print("option changed", option)
         if(option):
             pyautogui.click(x=1450, y=250, button="left", clicks=5)     # up button
         else:
             pyautogui.click(x=1330, y=250, button="left", clicks=5)     # down button
-        now_option = option
+        last_option = option
 
 
 def claim_round():
@@ -289,7 +274,7 @@ def start_round(option):
     option_round(option)
     place_round()
 
-def stop_round():
+def stop_round(option):
     claim_round()
     # check_balance()
 
@@ -316,7 +301,7 @@ def net_speed_check():
 
 async def download_link(session:ClientSession):
     async with session.get(api_url) as response:
-        # global is_place
+            global net_state
         # try:
             result = await response.json()
             depth_asks = round(float(result['asks'][0][0]) * _XRP["multi"])
@@ -324,7 +309,7 @@ async def download_link(session:ClientSession):
             if(depth_asks):
                 check_algo_1(depth_asks)
                 # check_algo_2(depth_asks)
-                net_speed_check()
+                net_state = net_speed_check()
         # except:
         #     if(is_place):
         #         stop_round()
@@ -343,7 +328,7 @@ async def download_all(times):
 
 
 while(True):
-    asyncio.run(download_all(5000))
+    asyncio.run(download_all(5000)) 
     print("finished" )    
 
 while(True): 
